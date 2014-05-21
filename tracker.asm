@@ -31,11 +31,14 @@
 
 
 ;***** VARIABLE DEFINITIONS
-w_temp		EQU	0x7D			; variable used for context saving
-status_temp	EQU	0x7E			; variable used for context saving
-pclath_temp	EQU	0x7F			; variable used for context saving
 
+; common locations to all banks 0x70 to 0x7F
 
+cblock 0x70
+w_temp          ; variable used for context saving
+status_temp     ; variable used for context saving
+pclath_temp     ; variable used for context saving
+endc
 
 
 ;**********************************************************************
