@@ -33,7 +33,7 @@
 	list		p=16f690		; list directive to define processor
 	#include	<P16F690.inc>		; processor specific variable definitions
 	
-	__CONFIG    _CP_OFF & _CPD_OFF & _BOR_OFF & _PWRTE_ON & _WDT_OFF & _INTRC_OSC_NOCLKOUT & _MCLRE_ON & _FCMEN_OFF & _IESO_OFF
+	__CONFIG    _CP_OFF & _CPD_OFF & _BOR_OFF & _PWRTE_ON & _WDT_OFF & _INTRC_OSC_NOCLKOUT & _MCLRE_OFF & _FCMEN_OFF & _IESO_OFF
 
 
 ; '__CONFIG' directive is used to embed configuration data within .asm file.
