@@ -1,32 +1,15 @@
 ;**********************************************************************
-;   This file is a basic code template for assembly code generation   *
-;   on the PIC16F690. This file contains the basic code               *
-;   building blocks to build upon.                                    *  
-;                                                                     *
-;   Refer to the MPASM User's Guide for additional information on     *
-;   features of the assembler (Document DS33014).                     *
-;                                                                     *
-;   Refer to the respective PIC data sheet for additional             *
-;   information on the instruction set.                               *
-;                                                                     *
-;**********************************************************************
-;                                                                     *
-;    Filename:	    xxx.asm                                           *
-;    Date:                                                            *
-;    File Version:                                                    *
-;                                                                     *
-;    Author:                                                          *
-;    Company:                                                         *
-;                                                                     * 
-;                                                                     *
-;**********************************************************************
-;                                                                     *
-;    Files Required: P16F690.INC                                      *
-;                                                                     *
-;**********************************************************************
-;                                                                     *
-;    Notes:                                                           *
-;                                                                     *
+; tracker.asm
+;
+; A simple HAB tracker developed as an exercise in learning PIC
+; assembler.
+;
+; Interfaces to the data line of an NTX2B transmitter to send minimal
+; UKHAS format RTTY telemetry strings at 50 baud 7N2 using an interrupt
+; generated at bit rate by timer 0.
+;
+; Interfaces to a UBLOX 7 GPS at 9600 baud 8N1 using the EUSART
+;
 ;**********************************************************************
 
 
