@@ -67,14 +67,5 @@ main
 ; remaining code goes here
 
 
-
-
-
-	ORG	0x2100				; data EEPROM location
-	DE	1,2,3,4				; define first four EEPROM locations as 1, 2, 3, and 4
-
-
-
-
 	END                       ; directive 'end of program'
 
