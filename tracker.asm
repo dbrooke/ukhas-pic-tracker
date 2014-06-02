@@ -137,21 +137,20 @@ callsign
 ;**********************************************************************
 main
     ; set I/O pin RA5 (RTTY Tx) as output
-    banksel TRISA
+    banksel TRISA   ; not bank 0
     bcf     TRISA,5
 
     ; configure timer 0 options
-    banksel OPTION_REG
+    ; same bank as TRISA so no banksel
     movlw   tmr0_options
     movwf   OPTION_REG
+    banksel TMR0    ; restore bank 0
 
     ; global interrupt enable
-    banksel INTCON
     bsf     INTCON,GIE
 
 main_loop
     ; wait while RTTY transmission is in progress
-    banksel INTCON
     btfsc   INTCON,T0IE
     goto    main_loop
 
@@ -202,7 +201,6 @@ copied_callsign
     movwf   TMR0
 
     ; enable timer 0 interrupt
-    banksel INTCON
     bcf     INTCON,T0IF
     bsf     INTCON,T0IE
 
