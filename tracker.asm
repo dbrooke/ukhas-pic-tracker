@@ -28,13 +28,13 @@
 #define tmr0_reload     d'230'
 #define tmr0_options    b'11010100' ; internal clock source, prescaler 1:32
 
-RTTY_BUF_LEN    EQU .40 ;length of RTTY buffer
+RTTY_BUF_LEN    EQU .80 ;length of RTTY buffer
 
 ;----------------------------------------------------------------------------
 ;Constants
 
 SPBRG_VAL   EQU .25     ;set baud rate 9600 for 4Mhz clock
-TX_BUF_LEN  EQU .80     ;length of transmit circular buffer
+TX_BUF_LEN  EQU .40     ;length of transmit circular buffer
 RX_BUF_LEN  EQU TX_BUF_LEN  ;length of receive circular buffer
 
 ;----------------------------------------------------------------------------
@@ -57,7 +57,6 @@ ReceivedCR  EQU 4       ;bit indicates <CR> character received
         ENDC
 
         CBLOCK  0x20
-        RTTYBuffer:RTTY_BUF_LEN ;RTTY transmit buffer
         tx_char         ;RTTY transmit character
         bit_count       ;count remaining bits in the transmit character
         tx_ptr          ;pointer to the character in transmit string
@@ -72,10 +71,11 @@ ReceivedCR  EQU 4       ;bit indicates <CR> character received
         ENDC
 
         CBLOCK  0xA0
-        TxBuffer:TX_BUF_LEN ;transmit data buffer
+        RTTYBuffer:RTTY_BUF_LEN ;RTTY transmit buffer
         ENDC
 
         CBLOCK  0x120
+        TxBuffer:TX_BUF_LEN ;transmit data buffer
         RxBuffer:RX_BUF_LEN ;receive data buffer
         ENDC
 
@@ -299,6 +299,15 @@ Main
     banksel TMR0    ; restore bank 0
 
 main_loop
+
+    ; for testing just copy characters from UART Rx to Tx
+    btfsc   Flags,RxBufEmpty
+    goto    no_rx_char
+
+    call    GetRxBuffer ;get data from receive buffer
+    call    PutTxBuffer ;put data in transmit buffer
+
+no_rx_char
     ; wait while RTTY transmission is in progress
     btfsc   INTCON,T0IE
     goto    main_loop
