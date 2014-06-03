@@ -61,6 +61,7 @@ ReceivedCR  EQU 4       ;bit indicates <CR> character received
         bit_count       ;count remaining bits in the transmit character
         tx_ptr          ;pointer to the character in transmit string
         index           ;index for copying strings
+        GGA_field       ;field counter for GPGGA message
         Flags           ;byte to store indicator flags
         TempData        ;temporary data in main routines 
         BufferData      ;temporary data in buffer routines 
@@ -298,16 +299,111 @@ Main
 
     banksel TMR0    ; restore bank 0
 
+    clrf    GGA_field
+
 main_loop
 
-    ; for testing just copy characters from UART Rx to Tx
+    ; if there is any Rx character then process it
     btfsc   Flags,RxBufEmpty
-    goto    no_rx_char
+    goto    after_rx_char
 
-    call    GetRxBuffer ;get data from receive buffer
-    call    PutTxBuffer ;put data in transmit buffer
+    movfw   GGA_field
 
-no_rx_char
+    addwf   PCL,F
+    goto    GGA_hdr_dollar
+    goto    GGA_hdr_G
+    goto    GGA_hdr_P
+    goto    GGA_hdr_G
+    goto    GGA_hdr_G
+    goto    GGA_hdr_A
+    goto    GGA_hdr_comma
+    goto    GGA_time
+    goto    GGA_lat
+    goto    GGA_NS
+    goto    GGA_long
+    goto    GGA_EW
+    goto    GGA_quality
+    goto    GGA_numSV
+    goto    GGA_HDOP
+    goto    GGA_alt
+    goto    GGA_uAlt
+    goto    GGA_sep
+    goto    GGA_uSep
+    goto    GGA_diffAge
+    goto    GGA_diffStation
+    goto    GGA_cs
+    goto    GGA_crlf
+
+GGA_hdr_dollar:
+    call    GetRxBuffer     ;get data from receive buffer
+    xorlw   A'$'            ;compare with '$'
+    skpz
+    goto    GGA_hdr_reset   ;mismatch so reset
+    incf    GGA_field,F     ;match so move on
+    goto    after_rx_char
+
+GGA_hdr_G:
+    call    GetRxBuffer     ;get data from receive buffer
+    xorlw   A'G'            ;compare with 'G'
+    skpz
+    goto    GGA_hdr_reset   ;mismatch so reset
+    incf    GGA_field,F     ;match so move on
+    goto    after_rx_char
+
+GGA_hdr_P:
+    call    GetRxBuffer     ;get data from receive buffer
+    xorlw   A'P'            ;compare with 'P'
+    skpz
+    goto    GGA_hdr_reset   ;mismatch so reset
+    incf    GGA_field,F     ;match so move on
+    goto    after_rx_char
+
+GGA_hdr_A:
+    call    GetRxBuffer     ;get data from receive buffer
+    xorlw   A'A'            ;compare with 'A'
+    skpz
+    goto    GGA_hdr_reset   ;mismatch so reset
+    incf    GGA_field,F     ;match so move on
+    goto    after_rx_char
+
+GGA_hdr_comma:
+    call    GetRxBuffer     ;get data from receive buffer
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    GGA_hdr_reset   ;mismatch so reset
+    incf    GGA_field,F     ;match so move on
+    goto    after_rx_char
+
+GGA_time:
+GGA_lat:
+GGA_NS:
+GGA_long:
+GGA_EW:
+GGA_quality:
+GGA_numSV:
+GGA_HDOP:
+GGA_alt:
+GGA_uAlt:
+GGA_sep:
+GGA_uSep:
+GGA_diffAge:
+GGA_diffStation:
+GGA_cs:
+GGA_crlf:
+    call    GetRxBuffer     ;get data from receive buffer
+    movwf   TempData        ;save data
+    call    PutTxBuffer     ;put data in transmit buffer
+    movf    TempData,W      ;restore data
+    xorlw   0x0a            ;compare with <LF>
+    skpnz
+    goto    GGA_hdr_reset
+    goto    after_rx_char
+
+GGA_hdr_reset:
+    clrf    GGA_field
+    goto    after_rx_char
+
+after_rx_char
     ; wait while RTTY transmission is in progress
     btfsc   INTCON,T0IE
     goto    main_loop
