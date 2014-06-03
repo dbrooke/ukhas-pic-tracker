@@ -292,10 +292,11 @@ Main
     ; same bank as TRISA so no banksel
     movlw   tmr0_options
     movwf   OPTION_REG
-    banksel TMR0    ; restore bank 0
 
-    ; global interrupt enable
-    bsf     INTCON,GIE
+    ; set up serial port and buffers
+    call    SetupSerial
+
+    banksel TMR0    ; restore bank 0
 
 main_loop
     ; wait while RTTY transmission is in progress
@@ -353,6 +354,31 @@ copied_callsign
     bsf     INTCON,T0IE
 
     goto    main_loop
+
+;----------------------------------------------------------------------------
+;Set up serial port and buffers.
+
+SetupSerial:    Bank2           ;select bank 2
+        bcf     ANSELH,ANS11    ; make RX pin digital
+        Bank1
+        movlw   SPBRG_VAL   ;set baud rate
+        movwf   SPBRG
+        movlw   0x24        ;enable transmission and high baud rate
+        movwf   TXSTA
+        Bank0           ;select bank0
+        movlw   0x90        ;enable serial port and reception
+        movwf   RCSTA
+        clrf    Flags       ;clear all flag bits
+
+        call    InitTxBuffer    ;initialize transmit buffer
+        call    InitRxBuffer    ;initialize receive buffer
+
+        movlw   0xc0        ;enable global and peripheral ints
+        movwf   INTCON
+        Bank1           ;select bank1
+        movlw   0x30        ;enable TX and RX interrupts
+        movwf   PIE1
+        return
 
 ;----------------------------------------------------------------------------
 ;Circular buffer routines.
