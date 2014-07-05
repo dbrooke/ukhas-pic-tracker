@@ -46,6 +46,7 @@ RxBufFull   EQU 2       ;bit indicates Rx buffer is full
 RxBufEmpty  EQU 3       ;bit indicates Rx buffer is empty
 ReceivedCR  EQU 4       ;bit indicates <CR> character received
 RxInGGA     EQU 5       ;bit indicates GGA message is being extracted
+RxGoodGGA   EQU 6       ;bit indicates good GGA message received
 
 ;----------------------------------------------------------------------------
 ;Variables
@@ -546,12 +547,21 @@ GGA_sep:
 GGA_uSep:
 GGA_diffAge:
 GGA_diffStation:
+    call    GetRxBuffer     ;get data from receive buffer
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    after_rx_char   ;mismatch so just continue
+    incf    GGA_field,F     ;match so move on
+    goto    after_rx_char
+
 GGA_cs:
     call    GetRxBuffer     ;get data from receive buffer
     xorlw   A','            ;compare with ','
     skpz
     goto    after_rx_char   ;mismatch so just continue
     incf    GGA_field,F     ;match so move on
+    ; FIXME should validate checksum
+    bsf     Flags,RxGoodGGA ;indicate that a good GGA has been received
     goto    after_rx_char
 
 GGA_crlf:
@@ -575,6 +585,13 @@ after_rx_char
     ; loop while GGA reception is in progress
     btfsc   Flags,RxInGGA
     goto    main_loop
+
+    ; loop until a good GGA has been received
+    btfss   Flags,RxGoodGGA
+    goto    main_loop
+
+    ; clear flag now that it is being processed
+    bcf     Flags,RxGoodGGA
 
     ; start building a test message in RTTY buffer
     movlw   RTTYBuffer
