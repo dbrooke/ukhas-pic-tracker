@@ -45,6 +45,7 @@ TxBufEmpty  EQU 1       ;bit indicates Tx buffer is empty
 RxBufFull   EQU 2       ;bit indicates Rx buffer is full
 RxBufEmpty  EQU 3       ;bit indicates Rx buffer is empty
 ReceivedCR  EQU 4       ;bit indicates <CR> character received
+RxInGGA     EQU 5       ;bit indicates GGA message is being extracted
 
 ;----------------------------------------------------------------------------
 ;Variables
@@ -58,10 +59,21 @@ ReceivedCR  EQU 4       ;bit indicates <CR> character received
 
         CBLOCK  0x20
         tx_char         ;RTTY transmit character
+        RTTY_ptr        ;pointer for writes to RTTY string
         bit_count       ;count remaining bits in the transmit character
         tx_ptr          ;pointer to the character in transmit string
         index           ;index for copying strings
         GGA_field       ;field counter for GPGGA message
+        field_ptr       ;write pointer for saved fields
+        field_r_ptr     ;read pointer for saved fields
+        GGA_time_field:.10      ;time field from GPGGA message
+        GGA_lat_field:.11       ;lat field from GPGGA message
+        GGA_NS_field:.2         ;NS field from GPGGA message
+        GGA_long_field:.12      ;long field from GPGGA message
+        GGA_EW_field:.2         ;EW field from GPGGA message
+        GGA_quality_field:.2    ;quality field from GPGGA message
+        GGA_numSV_field:.4      ;numSV field from GPGGA message
+        GGA_alt_field:.8        ;alt field from GPGGA message
         Flags           ;byte to store indicator flags
         TempData        ;temporary data in main routines 
         BufferData      ;temporary data in buffer routines 
@@ -231,6 +243,7 @@ isr_RTTY_bit:   Bank0   ;select bank 0
     goto    next_bit
 
     ; finished current char so get the next char
+    BANKISEL RTTYBuffer
     movf    tx_ptr,w
     movwf   FSR
     movf    INDF,w
@@ -288,6 +301,7 @@ Main
     ; set I/O pin RA5 (RTTY Tx) as output
     banksel TRISA   ; not bank 0
     bcf     TRISA,5
+    clrf    TRISC
 
     ; configure timer 0 options
     ; same bank as TRISA so no banksel
@@ -300,6 +314,17 @@ Main
     banksel TMR0    ; restore bank 0
 
     clrf    GGA_field
+
+    ;initialise fields as empty
+    movlw   A','
+    movwf   GGA_time_field
+    movwf   GGA_lat_field
+    movwf   GGA_NS_field
+    movwf   GGA_long_field
+    movwf   GGA_EW_field
+    movwf   GGA_quality_field
+    movwf   GGA_numSV_field
+    movwf   GGA_alt_field
 
 main_loop
 
@@ -372,28 +397,165 @@ GGA_hdr_comma:
     skpz
     goto    GGA_hdr_reset   ;mismatch so reset
     incf    GGA_field,F     ;match so move on
+    movlw   GGA_time_field  ;point to start of ...
+    movwf   field_ptr       ;next field
+    bsf     PORTC,3
+    bsf     Flags,RxInGGA   ;indicate that GGA fields are being extracted
     goto    after_rx_char
 
 GGA_time:
+    call    GetRxBuffer     ;get data from receive buffer
+    movwf   TempData        ;save data
+    BANKISEL GGA_time_field
+    movfw   field_ptr       ;retrieve the destination pointer
+    movwf   FSR             ;and set for writing
+    movf    TempData,W      ;restore data
+    movwf   INDF            ;write data
+    incf    field_ptr,f     ;advance the destination pointer
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    after_rx_char   ;mismatch so just continue
+    incf    GGA_field,F     ;match so move on
+    movlw   GGA_lat_field   ;point to start of ...
+    movwf   field_ptr       ;next field
+    goto    after_rx_char
+
 GGA_lat:
+    call    GetRxBuffer     ;get data from receive buffer
+    movwf   TempData        ;save data
+    BANKISEL GGA_lat_field
+    movfw   field_ptr       ;retrieve the destination pointer
+    movwf   FSR             ;and set for writing
+    movf    TempData,W      ;restore data
+    movwf   INDF            ;write data
+    incf    field_ptr,f     ;advance the destination pointer
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    after_rx_char   ;mismatch so just continue
+    incf    GGA_field,F     ;match so move on
+    movlw   GGA_NS_field    ;point to start of ...
+    movwf   field_ptr       ;next field
+    goto    after_rx_char
+
 GGA_NS:
+    call    GetRxBuffer     ;get data from receive buffer
+    movwf   TempData        ;save data
+    BANKISEL GGA_NS_field
+    movfw   field_ptr       ;retrieve the destination pointer
+    movwf   FSR             ;and set for writing
+    movf    TempData,W      ;restore data
+    movwf   INDF            ;write data
+    incf    field_ptr,f     ;advance the destination pointer
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    after_rx_char   ;mismatch so just continue
+    incf    GGA_field,F     ;match so move on
+    movlw   GGA_long_field  ;point to start of ...
+    movwf   field_ptr       ;next field
+    goto    after_rx_char
+
 GGA_long:
+    call    GetRxBuffer     ;get data from receive buffer
+    movwf   TempData        ;save data
+    BANKISEL GGA_long_field
+    movfw   field_ptr       ;retrieve the destination pointer
+    movwf   FSR             ;and set for writing
+    movf    TempData,W      ;restore data
+    movwf   INDF            ;write data
+    incf    field_ptr,f     ;advance the destination pointer
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    after_rx_char   ;mismatch so just continue
+    incf    GGA_field,F     ;match so move on
+    movlw   GGA_EW_field    ;point to start of ...
+    movwf   field_ptr       ;next field
+    goto    after_rx_char
+
 GGA_EW:
+    call    GetRxBuffer     ;get data from receive buffer
+    movwf   TempData        ;save data
+    BANKISEL GGA_EW_field
+    movfw   field_ptr       ;retrieve the destination pointer
+    movwf   FSR             ;and set for writing
+    movf    TempData,W      ;restore data
+    movwf   INDF            ;write data
+    incf    field_ptr,f     ;advance the destination pointer
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    after_rx_char   ;mismatch so just continue
+    incf    GGA_field,F     ;match so move on
+    movlw   GGA_quality_field ;point to start of ...
+    movwf   field_ptr       ;next field
+    goto    after_rx_char
+
 GGA_quality:
+    call    GetRxBuffer     ;get data from receive buffer
+    movwf   TempData        ;save data
+    BANKISEL GGA_quality_field
+    movfw   field_ptr       ;retrieve the destination pointer
+    movwf   FSR             ;and set for writing
+    movf    TempData,W      ;restore data
+    movwf   INDF            ;write data
+    incf    field_ptr,f     ;advance the destination pointer
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    after_rx_char   ;mismatch so just continue
+    incf    GGA_field,F     ;match so move on
+    movlw   GGA_numSV_field ;point to start of ...
+    movwf   field_ptr       ;next field
+    goto    after_rx_char
+
 GGA_numSV:
-GGA_HDOP:
+    call    GetRxBuffer     ;get data from receive buffer
+    movwf   TempData        ;save data
+    BANKISEL GGA_numSV_field
+    movfw   field_ptr       ;retrieve the destination pointer
+    movwf   FSR             ;and set for writing
+    movf    TempData,W      ;restore data
+    movwf   INDF            ;write data
+    incf    field_ptr,f     ;advance the destination pointer
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    after_rx_char   ;mismatch so just continue
+    incf    GGA_field,F     ;match so move on
+    movlw   GGA_alt_field   ;point to start of ...
+    movwf   field_ptr       ;next field
+    goto    after_rx_char
+
 GGA_alt:
+    call    GetRxBuffer     ;get data from receive buffer
+    movwf   TempData        ;save data
+    BANKISEL GGA_alt_field
+    movfw   field_ptr       ;retrieve the destination pointer
+    movwf   FSR             ;and set for writing
+    movf    TempData,W      ;restore data
+    movwf   INDF            ;write data
+    incf    field_ptr,f     ;advance the destination pointer
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    after_rx_char   ;mismatch so just continue
+    incf    GGA_field,F     ;match so move on
+    ; FIXME
+    ;movlw   GGA_numSV_field ;point to start of ...
+    ;movwf   field_ptr       ;next field
+    goto    after_rx_char
+
+GGA_HDOP:
 GGA_uAlt:
 GGA_sep:
 GGA_uSep:
 GGA_diffAge:
 GGA_diffStation:
 GGA_cs:
+    call    GetRxBuffer     ;get data from receive buffer
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    after_rx_char   ;mismatch so just continue
+    incf    GGA_field,F     ;match so move on
+    goto    after_rx_char
+
 GGA_crlf:
     call    GetRxBuffer     ;get data from receive buffer
-    movwf   TempData        ;save data
-    call    PutTxBuffer     ;put data in transmit buffer
-    movf    TempData,W      ;restore data
     xorlw   0x0a            ;compare with <LF>
     skpnz
     goto    GGA_hdr_reset
@@ -401,50 +563,197 @@ GGA_crlf:
 
 GGA_hdr_reset:
     clrf    GGA_field
+    bcf     PORTC,3
+    bcf     Flags,RxInGGA   ;indicate that GGA fields are not being extracted
     goto    after_rx_char
 
 after_rx_char
-    ; wait while RTTY transmission is in progress
+    ; loop while RTTY transmission is in progress
     btfsc   INTCON,T0IE
+    goto    main_loop
+
+    ; loop while GGA reception is in progress
+    btfsc   Flags,RxInGGA
     goto    main_loop
 
     ; start building a test message in RTTY buffer
     movlw   RTTYBuffer
-    movwf   FSR
+    movwf   RTTY_ptr    ; set pointer to start of buffer
 
     ; start with two $ characters
     movlw   a'$'
-    movwf   INDF
-    incf    FSR,f
-    movwf   INDF
-    incf    FSR,f
+    call    PutRTTYChar
+    call    PutRTTYChar
 
     ; copy the callsign
-    clrf    index
+    clrf    index       ;start at beginning
 copy_callsign
-    movf    index,w
+    movfw   index
     call    callsign
-    movwf   INDF
     addlw   0
-    btfsc   STATUS,Z
+    skpnz
     goto    copied_callsign
-    incf    FSR,f
+    call    PutRTTYChar
     incf    index,f
     goto    copy_callsign
 
 copied_callsign
 
+    ; add a comma separator
+    movlw   a','
+    call    PutRTTYChar
+
+    ; copy the time field up to decimal or comma (in case empty)
+    movlw   GGA_time_field
+    movwf   field_r_ptr
+copy_time
+    call    GetFieldChar
+    movwf   TempData
+    xorlw   A','    ;compare with ','
+    skpnz
+    goto    copied_time
+    movfw   TempData
+    xorlw   A'.'    ;compare with '.'
+    skpnz
+    goto    copied_time
+    movfw   TempData
+    call    PutRTTYChar
+    goto    copy_time
+
+copied_time
+
+    ; add a comma separator
+    movlw   a','
+    call    PutRTTYChar
+
+    ; if NS is 'S' then insert '-'
+    movfw   GGA_NS_field
+    xorlw   A'S'    ;compare with 'S'
+    skpz
+    goto    done_NS
+    movlw   a'-'
+    call    PutRTTYChar
+
+done_NS
+
+    ; copy the lat field up to comma
+    movlw   GGA_lat_field
+    movwf   field_r_ptr
+copy_lat
+    call    GetFieldChar
+    movwf   TempData
+    xorlw   A','    ;compare with ','
+    skpnz
+    goto    copied_lat
+    movfw   TempData
+    call    PutRTTYChar
+    goto    copy_lat
+
+copied_lat
+
+    ; add a comma separator
+    movlw   a','
+    call    PutRTTYChar
+
+    ; if EW is 'W' then insert '-'
+    movfw   GGA_EW_field
+    xorlw   A'W'    ;compare with 'W'
+    skpz
+    goto    done_EW
+    movlw   a'-'
+    call    PutRTTYChar
+
+done_EW
+
+    ; copy the long field up to comma
+    movlw   GGA_long_field
+    movwf   field_r_ptr
+copy_long
+    call    GetFieldChar
+    movwf   TempData
+    xorlw   A','    ;compare with ','
+    skpnz
+    goto    copied_long
+    movfw   TempData
+    call    PutRTTYChar
+    goto    copy_long
+
+copied_long
+
+    ; add a comma separator
+    movlw   a','
+    call    PutRTTYChar
+
+    ; copy the alt field up to decimal or comma (in case empty)
+    movlw   GGA_alt_field
+    movwf   field_r_ptr
+copy_alt
+    call    GetFieldChar
+    movwf   TempData
+    xorlw   A','    ;compare with ','
+    skpnz
+    goto    copied_alt
+    movfw   TempData
+    xorlw   A'.'    ;compare with '.'
+    skpnz
+    goto    copied_alt
+    movfw   TempData
+    call    PutRTTYChar
+    goto    copy_alt
+
+copied_alt
+
+    ; add a comma separator
+    movlw   a','
+    call    PutRTTYChar
+
+    ; copy the quality field up to comma
+    movlw   GGA_quality_field
+    movwf   field_r_ptr
+copy_quality
+    call    GetFieldChar
+    movwf   TempData
+    xorlw   A','    ;compare with ','
+    skpnz
+    goto    copied_quality
+    movfw   TempData
+    call    PutRTTYChar
+    goto    copy_quality
+
+copied_quality
+
+    ; add a comma separator
+    movlw   a','
+    call    PutRTTYChar
+
+    ; copy the numSV field up to comma
+    movlw   GGA_numSV_field
+    movwf   field_r_ptr
+copy_numSV
+    call    GetFieldChar
+    movwf   TempData
+    xorlw   A','    ;compare with ','
+    skpnz
+    goto    copied_numSV
+    movfw   TempData
+    call    PutRTTYChar
+    goto    copy_numSV
+
+copied_numSV
+
+    ; checksum delimiter
+    movlw   A'*'
+    call    PutRTTYChar
+
     ; CR for testing
     movlw   0x0D
-    movwf   INDF
-    incf    FSR,f
+    call    PutRTTYChar
 
     ; newline and zero terminator
     movlw   0x0A
-    movwf   INDF
-    incf    FSR,f
+    call    PutRTTYChar
     movlw   0x0
-    movwf   INDF
+    call    PutRTTYChar
 
     ; set tx pointer to start of RTTY buffer
     movlw   RTTYBuffer
@@ -459,6 +768,27 @@ copied_callsign
     bsf     INTCON,T0IE
 
     goto    main_loop
+
+GetFieldChar
+    BANKISEL GGA_time_field ;all the fields are in the same bank
+    movfw   field_r_ptr
+    movwf   FSR
+    movfw   INDF
+    incf    field_r_ptr,f
+    return
+
+PutRTTYChar
+    ;movwf   TempData        ;save data
+    ;call    PutTxBuffer     ;put data in transmit buffer
+    ;movf    TempData,W      ;restore data
+    BANKISEL RTTYBuffer
+    movwf   TempData
+    movfw   RTTY_ptr
+    movwf   FSR
+    movfw   TempData
+    movwf   INDF
+    incf    RTTY_ptr,f
+    return
 
 ;----------------------------------------------------------------------------
 ;Set up serial port and buffers.
