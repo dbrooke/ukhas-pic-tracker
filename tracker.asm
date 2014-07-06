@@ -75,6 +75,8 @@ RxGoodGGA   EQU 6       ;bit indicates good GGA message received
         GGA_quality_field:.2    ;quality field from GPGGA message
         GGA_numSV_field:.4      ;numSV field from GPGGA message
         GGA_alt_field:.8        ;alt field from GPGGA message
+        GGA_cs_field:.3         ;cs field from GPGGA message
+        NMEA_cs         ;NMEA message rolling checksum
         Flags           ;byte to store indicator flags
         TempData        ;temporary data in main routines 
         BufferData      ;temporary data in buffer routines 
@@ -358,7 +360,6 @@ main_loop
     goto    GGA_diffAge
     goto    GGA_diffStation
     goto    GGA_cs
-    goto    GGA_crlf
 
 GGA_hdr_dollar:
     call    GetRxBuffer     ;get data from receive buffer
@@ -366,10 +367,12 @@ GGA_hdr_dollar:
     skpz
     goto    GGA_hdr_reset   ;mismatch so reset
     incf    GGA_field,F     ;match so move on
+    clrf    NMEA_cs         ;clear the checksum
     goto    after_rx_char
 
 GGA_hdr_G:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     xorlw   A'G'            ;compare with 'G'
     skpz
     goto    GGA_hdr_reset   ;mismatch so reset
@@ -378,6 +381,7 @@ GGA_hdr_G:
 
 GGA_hdr_P:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     xorlw   A'P'            ;compare with 'P'
     skpz
     goto    GGA_hdr_reset   ;mismatch so reset
@@ -386,6 +390,7 @@ GGA_hdr_P:
 
 GGA_hdr_A:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     xorlw   A'A'            ;compare with 'A'
     skpz
     goto    GGA_hdr_reset   ;mismatch so reset
@@ -394,6 +399,7 @@ GGA_hdr_A:
 
 GGA_hdr_comma:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     xorlw   A','            ;compare with ','
     skpz
     goto    GGA_hdr_reset   ;mismatch so reset
@@ -406,6 +412,7 @@ GGA_hdr_comma:
 
 GGA_time:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     movwf   TempData        ;save data
     BANKISEL GGA_time_field
     movfw   field_ptr       ;retrieve the destination pointer
@@ -423,6 +430,7 @@ GGA_time:
 
 GGA_lat:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     movwf   TempData        ;save data
     BANKISEL GGA_lat_field
     movfw   field_ptr       ;retrieve the destination pointer
@@ -440,6 +448,7 @@ GGA_lat:
 
 GGA_NS:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     movwf   TempData        ;save data
     BANKISEL GGA_NS_field
     movfw   field_ptr       ;retrieve the destination pointer
@@ -457,6 +466,7 @@ GGA_NS:
 
 GGA_long:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     movwf   TempData        ;save data
     BANKISEL GGA_long_field
     movfw   field_ptr       ;retrieve the destination pointer
@@ -474,6 +484,7 @@ GGA_long:
 
 GGA_EW:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     movwf   TempData        ;save data
     BANKISEL GGA_EW_field
     movfw   field_ptr       ;retrieve the destination pointer
@@ -491,6 +502,7 @@ GGA_EW:
 
 GGA_quality:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     movwf   TempData        ;save data
     BANKISEL GGA_quality_field
     movfw   field_ptr       ;retrieve the destination pointer
@@ -508,6 +520,7 @@ GGA_quality:
 
 GGA_numSV:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     movwf   TempData        ;save data
     BANKISEL GGA_numSV_field
     movfw   field_ptr       ;retrieve the destination pointer
@@ -525,6 +538,7 @@ GGA_numSV:
 
 GGA_alt:
     call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
     movwf   TempData        ;save data
     BANKISEL GGA_alt_field
     movfw   field_ptr       ;retrieve the destination pointer
@@ -536,9 +550,8 @@ GGA_alt:
     skpz
     goto    after_rx_char   ;mismatch so just continue
     incf    GGA_field,F     ;match so move on
-    ; FIXME
-    ;movlw   GGA_numSV_field ;point to start of ...
-    ;movwf   field_ptr       ;next field
+    movlw   GGA_cs_field    ;point to start of ...
+    movwf   field_ptr       ;next field
     goto    after_rx_char
 
 GGA_HDOP:
@@ -546,9 +559,17 @@ GGA_uAlt:
 GGA_sep:
 GGA_uSep:
 GGA_diffAge:
+    call    GetRxBuffer     ;get data from receive buffer
+    xorwf   NMEA_cs,F       ;update checksum
+    xorlw   A','            ;compare with ','
+    skpz
+    goto    after_rx_char   ;mismatch so just continue
+    incf    GGA_field,F     ;match so move on
+    goto    after_rx_char
+
 GGA_diffStation:
     call    GetRxBuffer     ;get data from receive buffer
-    xorlw   A','            ;compare with ','
+    xorlw   A'*'            ;compare with '*'
     skpz
     goto    after_rx_char   ;mismatch so just continue
     incf    GGA_field,F     ;match so move on
@@ -556,20 +577,19 @@ GGA_diffStation:
 
 GGA_cs:
     call    GetRxBuffer     ;get data from receive buffer
-    xorlw   A','            ;compare with ','
+    movwf   TempData        ;save data
+    BANKISEL GGA_cs_field
+    movfw   field_ptr       ;retrieve the destination pointer
+    movwf   FSR             ;and set for writing
+    movf    TempData,W      ;restore data
+    movwf   INDF            ;write data
+    incf    field_ptr,f     ;advance the destination pointer
+    xorlw   0x0D            ;compare with <CR>
     skpz
     goto    after_rx_char   ;mismatch so just continue
-    incf    GGA_field,F     ;match so move on
     ; FIXME should validate checksum
     bsf     Flags,RxGoodGGA ;indicate that a good GGA has been received
-    goto    after_rx_char
-
-GGA_crlf:
-    call    GetRxBuffer     ;get data from receive buffer
-    xorlw   0x0a            ;compare with <LF>
-    skpnz
     goto    GGA_hdr_reset
-    goto    after_rx_char
 
 GGA_hdr_reset:
     clrf    GGA_field
