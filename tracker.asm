@@ -47,6 +47,7 @@ RxBufEmpty  EQU 3       ;bit indicates Rx buffer is empty
 ReceivedCR  EQU 4       ;bit indicates <CR> character received
 RxInGGA     EQU 5       ;bit indicates GGA message is being extracted
 RxGoodGGA   EQU 6       ;bit indicates good GGA message received
+ZS          EQU 7       ;bit indicates leading zero suppression
 
 ;----------------------------------------------------------------------------
 ;Variables
@@ -77,8 +78,17 @@ RxGoodGGA   EQU 6       ;bit indicates good GGA message received
         GGA_alt_field:.8        ;alt field from GPGGA message
         GGA_cs_field:.3         ;cs field from GPGGA message
         NMEA_cs         ;NMEA message rolling checksum
+        seq_hi          ;sequence ID high byte
+        seq_lo          ;sequence ID low byte
+        hiB
+        lowB
+        dec_no
+        CRC16_high
+        CRC16_low
+        CRC16_index
         Flags           ;byte to store indicator flags
-        TempData        ;temporary data in main routines 
+        tempH           ;temporary data in main routines
+        tempL           ;temporary data in main routines
         BufferData      ;temporary data in buffer routines 
         TxStartPtr      ;pointer to start of data in TX buffer
         TxEndPtr        ;pointer to end of data in TX buffer
@@ -299,6 +309,20 @@ callsign
     addwf   PCL,f
     dt  "DBTEST",0
 
+; Table consisting of values 10,000, 1000, 100, 10, and 1.
+decade
+    addwf   PCL,f
+    retlw   d'39'   ; 10,000
+    retlw   d'16'
+    retlw   d'3'    ; 1,000
+    retlw   d'232'
+    retlw   d'0'    ; 100
+    retlw   d'100'
+    retlw   d'0'    ; 10
+    retlw   d'10'
+    retlw   d'0'    ; 1
+    retlw   d'1'
+
 ;**********************************************************************
 Main
     ; set I/O pin RA5 (RTTY Tx) as output
@@ -316,6 +340,8 @@ Main
 
     banksel TMR0    ; restore bank 0
 
+    clrf    seq_hi
+    clrf    seq_lo
     clrf    GGA_field
 
     ;initialise fields as empty
@@ -413,11 +439,11 @@ GGA_hdr_comma:
 GGA_time:
     call    GetRxBuffer     ;get data from receive buffer
     xorwf   NMEA_cs,F       ;update checksum
-    movwf   TempData        ;save data
+    movwf   tempL           ;save data
     BANKISEL GGA_time_field
     movfw   field_ptr       ;retrieve the destination pointer
     movwf   FSR             ;and set for writing
-    movf    TempData,W      ;restore data
+    movf    tempL,W         ;restore data
     movwf   INDF            ;write data
     incf    field_ptr,f     ;advance the destination pointer
     xorlw   A','            ;compare with ','
@@ -431,11 +457,11 @@ GGA_time:
 GGA_lat:
     call    GetRxBuffer     ;get data from receive buffer
     xorwf   NMEA_cs,F       ;update checksum
-    movwf   TempData        ;save data
+    movwf   tempL           ;save data
     BANKISEL GGA_lat_field
     movfw   field_ptr       ;retrieve the destination pointer
     movwf   FSR             ;and set for writing
-    movf    TempData,W      ;restore data
+    movf    tempL,W         ;restore data
     movwf   INDF            ;write data
     incf    field_ptr,f     ;advance the destination pointer
     xorlw   A','            ;compare with ','
@@ -449,11 +475,11 @@ GGA_lat:
 GGA_NS:
     call    GetRxBuffer     ;get data from receive buffer
     xorwf   NMEA_cs,F       ;update checksum
-    movwf   TempData        ;save data
+    movwf   tempL           ;save data
     BANKISEL GGA_NS_field
     movfw   field_ptr       ;retrieve the destination pointer
     movwf   FSR             ;and set for writing
-    movf    TempData,W      ;restore data
+    movf    tempL,W         ;restore data
     movwf   INDF            ;write data
     incf    field_ptr,f     ;advance the destination pointer
     xorlw   A','            ;compare with ','
@@ -467,11 +493,11 @@ GGA_NS:
 GGA_long:
     call    GetRxBuffer     ;get data from receive buffer
     xorwf   NMEA_cs,F       ;update checksum
-    movwf   TempData        ;save data
+    movwf   tempL           ;save data
     BANKISEL GGA_long_field
     movfw   field_ptr       ;retrieve the destination pointer
     movwf   FSR             ;and set for writing
-    movf    TempData,W      ;restore data
+    movf    tempL,W         ;restore data
     movwf   INDF            ;write data
     incf    field_ptr,f     ;advance the destination pointer
     xorlw   A','            ;compare with ','
@@ -485,11 +511,11 @@ GGA_long:
 GGA_EW:
     call    GetRxBuffer     ;get data from receive buffer
     xorwf   NMEA_cs,F       ;update checksum
-    movwf   TempData        ;save data
+    movwf   tempL           ;save data
     BANKISEL GGA_EW_field
     movfw   field_ptr       ;retrieve the destination pointer
     movwf   FSR             ;and set for writing
-    movf    TempData,W      ;restore data
+    movf    tempL,W         ;restore data
     movwf   INDF            ;write data
     incf    field_ptr,f     ;advance the destination pointer
     xorlw   A','            ;compare with ','
@@ -503,11 +529,11 @@ GGA_EW:
 GGA_quality:
     call    GetRxBuffer     ;get data from receive buffer
     xorwf   NMEA_cs,F       ;update checksum
-    movwf   TempData        ;save data
+    movwf   tempL           ;save data
     BANKISEL GGA_quality_field
     movfw   field_ptr       ;retrieve the destination pointer
     movwf   FSR             ;and set for writing
-    movf    TempData,W      ;restore data
+    movf    tempL,W         ;restore data
     movwf   INDF            ;write data
     incf    field_ptr,f     ;advance the destination pointer
     xorlw   A','            ;compare with ','
@@ -521,11 +547,11 @@ GGA_quality:
 GGA_numSV:
     call    GetRxBuffer     ;get data from receive buffer
     xorwf   NMEA_cs,F       ;update checksum
-    movwf   TempData        ;save data
+    movwf   tempL           ;save data
     BANKISEL GGA_numSV_field
     movfw   field_ptr       ;retrieve the destination pointer
     movwf   FSR             ;and set for writing
-    movf    TempData,W      ;restore data
+    movf    tempL,W         ;restore data
     movwf   INDF            ;write data
     incf    field_ptr,f     ;advance the destination pointer
     xorlw   A','            ;compare with ','
@@ -539,11 +565,11 @@ GGA_numSV:
 GGA_alt:
     call    GetRxBuffer     ;get data from receive buffer
     xorwf   NMEA_cs,F       ;update checksum
-    movwf   TempData        ;save data
+    movwf   tempL           ;save data
     BANKISEL GGA_alt_field
     movfw   field_ptr       ;retrieve the destination pointer
     movwf   FSR             ;and set for writing
-    movf    TempData,W      ;restore data
+    movf    tempL,W         ;restore data
     movwf   INDF            ;write data
     incf    field_ptr,f     ;advance the destination pointer
     xorlw   A','            ;compare with ','
@@ -577,11 +603,11 @@ GGA_diffStation:
 
 GGA_cs:
     call    GetRxBuffer     ;get data from receive buffer
-    movwf   TempData        ;save data
+    movwf   tempL           ;save data
     BANKISEL GGA_cs_field
     movfw   field_ptr       ;retrieve the destination pointer
     movwf   FSR             ;and set for writing
-    movf    TempData,W      ;restore data
+    movf    tempL,W         ;restore data
     movwf   INDF            ;write data
     incf    field_ptr,f     ;advance the destination pointer
     xorlw   0x0D            ;compare with <CR>
@@ -613,6 +639,12 @@ after_rx_char
     ; clear flag now that it is being processed
     bcf     Flags,RxGoodGGA
 
+    ; increment sequence ID
+    incfsz  seq_lo,F
+    goto    done_sequence
+    incf    seq_hi,F
+done_sequence
+
     ; start building a test message in RTTY buffer
     movlw   RTTYBuffer
     movwf   RTTY_ptr    ; set pointer to start of buffer
@@ -621,6 +653,9 @@ after_rx_char
     movlw   a'$'
     call    PutRTTYChar
     call    PutRTTYChar
+
+    ; the CRC excludes the leading '$' so initialise now
+    call    CRC_init
 
     ; copy the callsign
     clrf    index       ;start at beginning
@@ -640,20 +675,36 @@ copied_callsign
     movlw   a','
     call    PutRTTYChar
 
+    ; add the sequence ID as ASCII decimal
+    movfw   RTTY_ptr
+    movwf   FSR
+    movfw   seq_hi
+    movwf   hiB
+    movfw   seq_lo
+    movwf   lowB
+    call    PRDEC
+    movfw   FSR
+    movwf   RTTY_ptr
+    incf    RTTY_ptr,f
+
+    ; add a comma separator
+    movlw   a','
+    call    PutRTTYChar
+
     ; copy the time field up to decimal or comma (in case empty)
     movlw   GGA_time_field
     movwf   field_r_ptr
 copy_time
     call    GetFieldChar
-    movwf   TempData
+    movwf   tempL
     xorlw   A','    ;compare with ','
     skpnz
     goto    copied_time
-    movfw   TempData
+    movfw   tempL
     xorlw   A'.'    ;compare with '.'
     skpnz
     goto    copied_time
-    movfw   TempData
+    movfw   tempL
     call    PutRTTYChar
     goto    copy_time
 
@@ -678,11 +729,11 @@ done_NS
     movwf   field_r_ptr
 copy_lat
     call    GetFieldChar
-    movwf   TempData
+    movwf   tempL
     xorlw   A','    ;compare with ','
     skpnz
     goto    copied_lat
-    movfw   TempData
+    movfw   tempL
     call    PutRTTYChar
     goto    copy_lat
 
@@ -707,11 +758,11 @@ done_EW
     movwf   field_r_ptr
 copy_long
     call    GetFieldChar
-    movwf   TempData
+    movwf   tempL
     xorlw   A','    ;compare with ','
     skpnz
     goto    copied_long
-    movfw   TempData
+    movfw   tempL
     call    PutRTTYChar
     goto    copy_long
 
@@ -726,15 +777,15 @@ copied_long
     movwf   field_r_ptr
 copy_alt
     call    GetFieldChar
-    movwf   TempData
+    movwf   tempL
     xorlw   A','    ;compare with ','
     skpnz
     goto    copied_alt
-    movfw   TempData
+    movfw   tempL
     xorlw   A'.'    ;compare with '.'
     skpnz
     goto    copied_alt
-    movfw   TempData
+    movfw   tempL
     call    PutRTTYChar
     goto    copy_alt
 
@@ -749,11 +800,11 @@ copied_alt
     movwf   field_r_ptr
 copy_quality
     call    GetFieldChar
-    movwf   TempData
+    movwf   tempL
     xorlw   A','    ;compare with ','
     skpnz
     goto    copied_quality
-    movfw   TempData
+    movfw   tempL
     call    PutRTTYChar
     goto    copy_quality
 
@@ -768,19 +819,30 @@ copied_quality
     movwf   field_r_ptr
 copy_numSV
     call    GetFieldChar
-    movwf   TempData
+    movwf   tempL
     xorlw   A','    ;compare with ','
     skpnz
     goto    copied_numSV
-    movfw   TempData
+    movfw   tempL
     call    PutRTTYChar
     goto    copy_numSV
 
 copied_numSV
 
+    movfw   RTTY_ptr
+    movwf   FSR
     ; checksum delimiter
+    ; this is not included in CRC so write it directly
     movlw   A'*'
-    call    PutRTTYChar
+    movwf   INDF
+    ; print CRC as ASCII HEX
+    movfw   CRC16_high
+    call    PRHEX
+    movfw   CRC16_low
+    call    PRHEX
+    movfw   FSR
+    movwf   RTTY_ptr
+    incf    RTTY_ptr,f
 
     ; CR for testing
     movlw   0x0D
@@ -815,16 +877,149 @@ GetFieldChar
     return
 
 PutRTTYChar
-    ;movwf   TempData        ;save data
+    ;movwf   tempL        ;save data
     ;call    PutTxBuffer     ;put data in transmit buffer
-    ;movf    TempData,W      ;restore data
+    ;movf    tempL,W      ;restore data
     BANKISEL RTTYBuffer
-    movwf   TempData
+    movwf   tempL
     movfw   RTTY_ptr
     movwf   FSR
-    movfw   TempData
+    movfw   tempL
     movwf   INDF
+    call    CRC_update
     incf    RTTY_ptr,f
+    return
+
+; This routine converts the value in W to 2 ASCII hex digits beginning
+; at the address after FSR.
+PRHEX:
+    movwf   tempL       ; save byte temporarily
+    swapf   tempL,w
+    ; convert top nibble
+    call    convert_nibble
+    ; get back bottom nibble
+    movf    tempL,w
+    ; and convert low nibble
+convert_nibble:
+    andlw   0x0F
+    addlw   0xF6
+    btfsc   STATUS,C
+    addlw   0x07
+    addlw   0x3A
+    incf    FSR,f
+    movwf   INDF
+    return
+
+; This routine accepts a 16-bit number in hiB, lowB and converts it into
+; an ASCII text string beginning at the address of FSR.
+; The routine destroys the contents of hiB, lowB.
+PRDEC:
+    bcf     Flags,ZS                ; Clear zs flag.
+    clrf    dec_no                  ; Clear decade no.
+prdeclp:
+    movf    dec_no,w
+    call    decade                  ; table lookup
+    movwf   tempH                   ; save it
+    incf    dec_no,f                ; Get 2nd digit of decade no.
+    movf    dec_no,w                ; incremented decade counter
+    call    decade                  ; table lookup
+    movwf   tempL                   ; save it
+    call    sub_it                  ; Divide hiB,lowB by tempH,tempL
+    movf    INDF,w                  ; get the result
+    btfsc   Flags,ZS                ; If zs = 0 AND digit = 0 then
+    goto    prdecnzs
+    btfsc   STATUS,2                ; digit is a leading zero to be
+    goto    prdecnz
+prdecnzs:       ;no leading 0 supression
+    movwf   INDF
+    movlw   a'0'
+    addwf   INDF,f                  ; add ascii '0'
+    movf    INDF,w
+    call    CRC_update
+    incf    FSR,f                   ; Point to next memory location.
+    bsf     Flags,ZS                ; First non-zero digit sets zs bit.
+prdecnz:
+    incf    dec_no,f                ; Next decade.
+    movlw   0x08                    ; If dec_no = 8, we're down to ones.
+    subwf   dec_no,w
+    btfss   STATUS,2
+    goto    prdeclp                 ; Otherwise, do next decade.
+    incf    dec_no,f                ; Update decade number for d_point.
+    movf    lowB,w
+    movwf   INDF
+    movlw   a'0'
+    addwf   INDF,f                  ; add ascii '0'
+    movf    INDF,w
+    call    CRC_update
+    retlw   0x00
+
+; This routine performs division by iterated subtraction. It is efficient
+; in this application because the dividend and divisor keep getting smaller
+; as BIN_ASC runs, so the quotient is never larger than nine. A general-
+; purpose division routine would be slower (and longer).
+sub_it:
+        clrf    INDF                    ; Clear to track no. of subtractions.
+sub_it_loop:
+        movf    tempL,w                 ; Subtract LSB.
+        subwf   lowB,f
+        btfsc   STATUS,0                ; If no borrow, continue w/MSB.
+        goto    sub_it_skip
+        movlw   0x01                    ; Otherwise borrow from MSB.
+        subwf   hiB,f
+        btfsc   STATUS,0                ; If borrow causes a carry, then
+        goto    sub_it_skip
+        incf    hiB,f                   ; add numbers back and return.
+        movf    tempL,w
+        addwf   lowB,f
+        retlw   0x00
+sub_it_skip:
+        movf    tempH,w                 ; Subtract MSB.
+        subwf   hiB,f
+        btfsc   STATUS,0                ; If no borrow, subtract again.
+        goto    sub_it_skip2
+        movf    tempL,w
+        addwf   lowB,f                  ; Otherwise, undo the subtraction
+        btfsc   STATUS,0                ; by adding entire 16-bit no.
+        incf    hiB,f                   ; back together and return.
+        movf    tempH,w
+        addwf   hiB,f
+        retlw   0x00
+sub_it_skip2
+        incf    INDF,f                  ; No borrow, so do it again.
+        goto    sub_it_loop
+
+CRC_init:
+    movlw   0xFF
+    movwf   CRC16_high
+    movwf   CRC16_low
+    retlw   0
+
+CRC_update:
+    movwf   tempL
+    xorwf   CRC16_high,w    ; (a^x):(b^y)
+    movwf   CRC16_index       ;
+    andlw   0xf0        ; W = (a^x):0
+    swapf   CRC16_index,f     ; CRC16_index = (b^y):(a^x)
+    xorwf   CRC16_index,f     ; CRC16_index = (a^b^x^y):(a^x) = i2:i1
+
+
+  ; High byte
+    movf    CRC16_index,W
+    andlw   0xf0
+    xorwf   CRC16_low,W
+    movwf   CRC16_high
+
+    rlf CRC16_index,W     ;
+    rlf CRC16_index,W     ;
+    xorwf   CRC16_high,f
+    andlw   0xe0
+    xorwf   CRC16_high,f
+
+    swapf   CRC16_index,F
+    xorwf   CRC16_index,W
+    movwf   CRC16_low
+
+    movf    tempL,W
     return
 
 ;----------------------------------------------------------------------------
