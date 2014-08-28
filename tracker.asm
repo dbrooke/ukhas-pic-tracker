@@ -28,6 +28,11 @@
 #define tmr0_reload     d'230'
 #define tmr0_options    b'11010100' ; internal clock source, prescaler 1:32
 
+; below are the values for 50 baud
+
+;#define tmr0_reload     d'100'
+;#define tmr0_options    b'11010110' ; internal clock source, prescaler 1:128
+
 RTTY_BUF_LEN    EQU .80 ;length of RTTY buffer
 
 ;----------------------------------------------------------------------------
